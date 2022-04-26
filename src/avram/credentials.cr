@@ -7,7 +7,7 @@ class Avram::Credentials
     @username : String? = nil,
     @password : String? = nil,
     @port : Int32? = nil,
-    @query : String? = nil
+    @query : String? = "retry_attempts=4&max_idle_pool_size=5"
   )
     @url = build_url
   end
@@ -77,7 +77,7 @@ class Avram::Credentials
   end
 
   def query : String?
-    @query.try(&.strip).presence
+    @query
   end
 
   # Returns the postgres connection string without
