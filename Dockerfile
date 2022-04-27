@@ -1,15 +1,8 @@
-FROM crystallang/crystal:1.0.0
+FROM crystallang/crystal:1.4.0-alpine
 WORKDIR /data
 
 # install base dependencies
-RUN apt-get update && \
-  apt-get install -y libgconf-2-4 curl libreadline-dev && \
-  # postgres 11 installation
-  curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - && \
-  echo "deb http://apt.postgresql.org/pub/repos/apt/ bionic-pgdg main" | tee /etc/apt/sources.list.d/postgres.list && \
-  apt-get update && \
-  apt-get install -y postgresql-11 && \
-  rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN apk --no-cache add postgresql-client
 
 # Lucky cli
 RUN git clone https://github.com/luckyframework/lucky_cli --branch v0.27.0 --depth 1 /usr/local/lucky_cli && \
