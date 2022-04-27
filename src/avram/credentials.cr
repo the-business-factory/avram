@@ -7,7 +7,7 @@ class Avram::Credentials
     @username : String? = nil,
     @password : String? = nil,
     @port : Int32? = nil,
-    @query : String? = "retry_attempts=4&max_idle_pool_size=5"
+    @query : String = "retry_attempts=4&max_idle_pool_size=5"
   )
     @url = build_url
   end
@@ -44,7 +44,7 @@ class Avram::Credentials
       username: uri.user,
       password: uri.password,
       port: uri.port,
-      query: uri.query
+      query: uri.query || "retry_attempts=4&max_idle_pool_size=5"
     )
   end
 
@@ -76,7 +76,7 @@ class Avram::Credentials
     @port
   end
 
-  def query : String?
+  def query : String
     @query
   end
 

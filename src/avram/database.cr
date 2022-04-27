@@ -182,6 +182,15 @@ abstract class Avram::Database
   private def with_connection
     key = object_id
     connections[key] ||= db.checkout
+    stats = db.pool.stats
+    Log.info do
+      {
+        open_connections:      stats.open_connections,
+        idle_connections:      stats.idle_connections,
+        in_flight_connections: stats.in_flight_connections,
+        max_connections:       stats.max_connections,
+      }
+    end
     connection = connections[key]
 
     begin
