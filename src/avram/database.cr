@@ -182,23 +182,19 @@ abstract class Avram::Database
   private def with_connection
     key = object_id
     connections[key] ||= db.checkout
-    stats = db.pool.stats
-    Log.info do
-      {
-        open_connections:      stats.open_connections,
-        idle_connections:      stats.idle_connections,
-        in_flight_connections: stats.in_flight_connections,
-        max_connections:       stats.max_connections,
-      }
-    end
     connection = connections[key]
+
+    Log.info { "Fiber ID #{key} checked out connection: #{pp(connection)}" }
 
     begin
       yield connection
     ensure
       if !connection._avram_in_transaction?
+        Log.info { "Fiber ID #{key} releasing connection: #{pp(connection)}" }
         connection.release
         connections.delete(key)
+      else
+        Log.info { "Fiber ID #{key} in transaction, not releasing connection" }
       end
     end
   end
