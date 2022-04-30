@@ -171,13 +171,9 @@ abstract class Avram::Database
     @@db ||= @@lock.synchronize do
       # check @@db again because a previous request could have set it after
       # the first time it was checked
-      @@db || connection.open
-    end
-  end
-
-  def checkout_with_reaper
-    db.checkout.tap do |pool|
-      Tasker.every(5.minutes) { pool.reap }
+      (@@db || connection.open).tap do |db|
+        Tasker.every(5.minutes) { db.pool.reap }
+      end
     end
   end
 
@@ -187,7 +183,7 @@ abstract class Avram::Database
   # once the block is finished
   private def with_connection
     key = object_id
-    connections[key] ||= checkout_with_reaper
+    connections[key] ||= db.checkout
     connection = connections[key]
 
     begin
