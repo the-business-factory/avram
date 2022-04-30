@@ -175,26 +175,27 @@ abstract class Avram::Database
     end
   end
 
+  def checkout_with_reaper
+    db.checkout.tap do |pool|
+      Tasker.every(5.minutes) { pool.reap }
+    end
+  end
+
   # singular place to retrieve a DB::Connection
   # must be passed a block and we
   # try to release the connection back to the pool
   # once the block is finished
   private def with_connection
     key = object_id
-    connections[key] ||= db.checkout
+    connections[key] ||= checkout_with_reaper
     connection = connections[key]
-
-    Log.info { "Fiber ID #{key} checked out connection: #{pp(connection)}" }
 
     begin
       yield connection
     ensure
       if !connection._avram_in_transaction?
-        Log.info { "Fiber ID #{key} releasing connection: #{pp(connection)}" }
         connection.release
         connections.delete(key)
-      else
-        Log.info { "Fiber ID #{key} in transaction, not releasing connection" }
       end
     end
   end
