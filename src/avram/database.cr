@@ -9,6 +9,8 @@ abstract class Avram::Database
   macro inherited
     Habitat.create do
       setting credentials : Avram::Credentials, example: %(Avram::Credentials.new(database: "my_database", username: "postgres") or Avram::Credentials.parse(ENV["DB_URL"]))
+      setting reaping_frequency : Int32 = 60
+      setting max_connection_length : Int32 = 3600
     end
   end
 
@@ -32,7 +34,7 @@ abstract class Avram::Database
   end
 
   def self.verify_connection
-    new.connection.open.close
+    new.avram_connection.open.close
   end
 
   # Rollback the current transaction
@@ -160,10 +162,10 @@ abstract class Avram::Database
 
   # :nodoc:
   def listen(*channels : String, &block : PQ::Notification ->) : Nil
-    connection.connect_listen(*channels, &block)
+    avram_connection.connect_listen(*channels, &block)
   end
 
-  protected def connection : Avram::Connection
+  protected def avram_connection : Avram::Connection
     Avram::Connection.new(url, database_class: self.class)
   end
 
@@ -171,7 +173,33 @@ abstract class Avram::Database
     @@db ||= @@lock.synchronize do
       # check @@db again because a previous request could have set it after
       # the first time it was checked
-      @@db || connection.open
+      @@db || avram_connection.open.tap { add_reaper! }
+    end
+  end
+
+  protected def add_reaper! : Nil
+    Tasker.every(settings.reaping_frequency.seconds) { reap_connections! }
+  end
+
+  protected def reap_connections! : Nil
+    connections.each do |key, connection|
+      next if connection._avram_in_transaction?
+      next unless connection.expired?
+
+      expire!(connection, key)
+    end
+  end
+
+  protected def expire!(cnn : DB::Connection, key : FiberId)
+    Log.info { "Reaper is closing connection for Fiber #{key}" }
+    cnn.release
+    connections.delete(key)
+    connections[key] = db.pool._new_connection!
+  end
+
+  protected def build_resource : DB::Connection
+    db.checkout.tap do |cnn|
+      cnn._expires_at = Time.utc + settings.max_connection_length.seconds
     end
   end
 
@@ -181,7 +209,7 @@ abstract class Avram::Database
   # once the block is finished
   private def with_connection
     key = object_id
-    connections[key] ||= db.checkout
+    connections[key] ||= build_resource
     connection = connections[key]
 
     begin
