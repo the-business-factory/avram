@@ -12,6 +12,11 @@ module DB
     end
 
     # :nodoc:
+    def not_expired?
+      !expired?
+    end
+
+    # :nodoc:
     def _avram_in_transaction? : Bool
       !_avram_stack.empty?
     end

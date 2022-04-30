@@ -4,6 +4,7 @@ abstract class Avram::Database
   @@db : DB::Database? = nil
   @@lock = Mutex.new
   class_getter connections = {} of FiberId => DB::Connection
+  class_getter connections_idx = {} of FiberId => FiberId
   class_property lock_id : UInt64?
 
   macro inherited
@@ -173,28 +174,23 @@ abstract class Avram::Database
     @@db ||= @@lock.synchronize do
       # check @@db again because a previous request could have set it after
       # the first time it was checked
-      @@db || avram_connection.open.tap { add_reaper! }
+      @@db || avram_connection.open.tap { |new_db| add_reaper!(new_db) }
     end
   end
 
-  protected def add_reaper! : Nil
-    Tasker.every(settings.reaping_frequency.seconds) { reap_connections! }
-  end
+  protected def add_reaper!(new_db : DB::Database) : Nil
+    Tasker.every(settings.reaping_frequency.seconds) do
+      db.pool.each_resource do |connection|
+        next if connection._avram_in_transaction?
+        next if connection.not_expired?
 
-  protected def reap_connections! : Nil
-    connections.each do |key, connection|
-      next if connection._avram_in_transaction?
-      next unless connection.expired?
-
-      expire!(connection, key)
+        connection.close
+        spawn { db.pool._new_connection! }
+        fiber_id = connections_idx[connection.object_id]
+        connections.delete(fiber_id)
+        connections_idx.delete(connection.object_id)
+      end
     end
-  end
-
-  protected def expire!(cnn : DB::Connection, key : FiberId)
-    Log.info { "Reaper is closing connection for Fiber #{key}" }
-    cnn.release
-    connections.delete(key)
-    connections[key] = db.pool._new_connection!
   end
 
   protected def build_resource : DB::Connection
@@ -211,6 +207,7 @@ abstract class Avram::Database
     key = object_id
     connections[key] ||= build_resource
     connection = connections[key]
+    connections_idx[connection.object_id] ||= key
 
     begin
       yield connection
@@ -258,6 +255,10 @@ abstract class Avram::Database
 
   private def connections
     self.class.connections
+  end
+
+  private def connections_idx
+    self.class.connections_idx
   end
 
   private def wrap_in_transaction(conn)
