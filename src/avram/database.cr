@@ -3,6 +3,7 @@ abstract class Avram::Database
 
   @@db : DB::Database? = nil
   @@lock = Mutex.new
+  @@reaper_added = false
   class_getter connections = {} of FiberId => DB::Connection
   class_property lock_id : UInt64?
 
@@ -173,30 +174,34 @@ abstract class Avram::Database
     @@db ||= @@lock.synchronize do
       # check @@db again because a previous request could have set it after
       # the first time it was checked
-      @@db || avram_connection.open.tap { |new_db| add_reaper!(new_db) }
+      @@db || avram_connection.open.tap { add_reaper! }
     end
   end
 
-  protected def add_reaper!(new_db : DB::Database) : Nil
+  protected def add_reaper! : Nil
+    return if @@reaper_added
+
     Tasker.every(settings.reaping_frequency.seconds) do
-      Log.info { "Running Connection Reaper" }
+      ::Log.info { "Running Connection Reaper" }
       # each_resource uses a mutex#sync and yields @idle connections, so nothing
       # should be in use or in self.class.connections
       db.pool.each_resource do |connection|
-        Log.info { "checking #{connection.object_id}, #{connection._expires_at} "}
-        next unless connection.expired?
-
-        Log.info { "closing #{connection.object_id}" }
-        connection.close
-        db.pool._new_connection!
+        conndata = "#{connection.object_id}, #{connection._expires_at}"
+        if connection.expired?
+          ::Log.info { "STILL OPEN: #{conndata} "}
+        else
+          ::Log.info { "CLOSING #{conndata}" }
+          connection.close
+          db.pool.create_expiring_connection!(settings.max_connection_length)
+        end
       end
     end
+
+    @@reaper_added
   end
 
   protected def build_resource : DB::Connection
-    db.checkout.tap do |cnn|
-      cnn._expires_at = Time.utc + settings.max_connection_length.seconds
-    end
+    db.checkout.tap &.set_expiration!(settings.max_connection_length)
   end
 
   # singular place to retrieve a DB::Connection
