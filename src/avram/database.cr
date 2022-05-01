@@ -186,11 +186,10 @@ abstract class Avram::Database
       # each_resource uses a mutex#sync and yields @idle connections, so nothing
       # should be in use or in self.class.connections
       db.pool.each_resource do |connection|
-        conndata = "#{connection.object_id}, #{connection._expires_at}"
         if connection.expired?
-          ::Log.info { "STILL OPEN: #{conndata} "}
+          ::Log.info { "DB Connection OK: #{connection.conndata} "}
         else
-          ::Log.info { "CLOSING #{conndata}" }
+          ::Log.info { "Closing DB Connection: #{connection.conndata}" }
           connection.close
           db.pool.create_expiring_connection!(settings.max_connection_length)
         end

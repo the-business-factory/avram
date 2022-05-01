@@ -15,6 +15,10 @@ module DB
       self._expires_at ||= Time.utc + amount_in_seconds.seconds
     end
 
+    def conndata
+      "#{object_id}, #{_expires_at}"
+    end
+
     # :nodoc:
     def _avram_in_transaction? : Bool
       !_avram_stack.empty?
