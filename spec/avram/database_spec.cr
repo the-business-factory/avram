@@ -5,21 +5,16 @@ describe Avram::Database do
     it "closes idle db connections after they expire" do
       db = ReaperDatabase.new
       cnn = db.checkout_connection
-
-      sleep(1)
       cnn.closed?.should be_false
-
       cnn.release
-      sleep(1)
 
+      sleep(1)
       cnn.closed?.should be_true
     end
 
     it "does not close open connections until they are released" do
       db = ReaperDatabase.new
       cnn = db.checkout_connection
-
-      sleep(2)
       cnn.closed?.should be_false
 
       sleep(0.5)

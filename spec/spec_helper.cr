@@ -50,8 +50,8 @@ ReaperDatabase.configure do |settings|
     username: "lucky",
     password: "developer"
   )
-  settings.reaping_frequency = 1
-  settings.max_connection_length = 0
+  settings.reaping_retry_delay = 1
+  settings.max_connection_length = 1
 end
 
 Habitat.raise_if_missing_settings!

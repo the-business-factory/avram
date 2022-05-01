@@ -3,14 +3,14 @@ abstract class Avram::Database
 
   @@db : DB::Database? = nil
   @@lock = Mutex.new
-  @@reaper_added = false
+
   class_getter connections = {} of FiberId => DB::Connection
   class_property lock_id : UInt64?
 
   macro inherited
     Habitat.create do
       setting credentials : Avram::Credentials, example: %(Avram::Credentials.new(database: "my_database", username: "postgres") or Avram::Credentials.parse(ENV["DB_URL"]))
-      setting reaping_frequency : Int32 = 60
+      setting reaping_retry_delay : Int32 = 15
       setting max_connection_length : Int32 = 3600
     end
   end
@@ -174,32 +174,18 @@ abstract class Avram::Database
     @@db ||= @@lock.synchronize do
       # check @@db again because a previous request could have set it after
       # the first time it was checked
-      @@db || avram_connection.open # .tap { add_reaper! }
+      @@db || avram_connection.open
     end
   end
 
-  # protected def add_reaper! : Nil
-  #   return if @@reaper_added
-
-  #   Tasker.every(settings.reaping_frequency.seconds) do
-  #     # each_resource uses a mutex#sync and yields @idle connections, so nothing
-  #     # should be in use or in self.class.connections
-  #     db.pool.each_resource do |connection|
-  #       if connection.expired?
-  #         connection.close
-
-  #         spawn do
-  #           db.pool.create_expiring_connection!(settings.max_connection_length)
-  #         end
-  #       end
-  #     end
-  #   end
-
-  #   @@reaper_added = true
-  # end
-
   protected def checkout_expiring_connection : DB::Connection
-    db.checkout.tap &.create_expiring!(db.pool, settings.max_connection_length)
+    db.checkout.tap do |cnn|
+      cnn.create_expiring!(
+        db.pool,
+        settings.max_connection_length,
+        settings.reaping_retry_delay
+      )
+    end
   end
 
   def checkout_connection : DB::Connection
