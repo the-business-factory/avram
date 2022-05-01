@@ -201,7 +201,7 @@ abstract class Avram::Database
       end
     end
 
-    @@reaper_added
+    @@reaper_added = true
   end
 
   protected def build_resource : DB::Connection
