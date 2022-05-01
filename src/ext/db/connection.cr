@@ -13,7 +13,7 @@ module DB
 
     def set_expiration!(seconds : Int32)
       # Stagger expiration to avoid thundering herd
-      expires_in = rand((seconds * 0.5)..(seconds * 1.5)).floor
+      expires_in = rand((seconds * 0.5)..(seconds * 1.5)).floor.to_i
       self._expires_at ||= Time.utc + expires_in.seconds
     end
 
