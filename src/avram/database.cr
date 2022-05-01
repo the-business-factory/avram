@@ -187,8 +187,6 @@ abstract class Avram::Database
       # should be in use or in self.class.connections
       db.pool.each_resource do |connection|
         if connection.expired?
-          ::Log.info { "DB Connection OK: #{Time.utc}, #{connection.conndata} "}
-        else
           ::Log.info { "Closing DB Connection: #{Time.utc}, #{connection.conndata}" }
           connection.close
 
@@ -197,6 +195,8 @@ abstract class Avram::Database
           spawn do
             db.pool.create_expiring_connection!(settings.max_connection_length)
           end
+        else
+          ::Log.info { "DB Connection OK: #{Time.utc}, #{connection.conndata} "}
         end
       end
     end

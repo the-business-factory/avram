@@ -8,7 +8,7 @@ module DB
 
     # :nodoc:
     def expired?
-      _expires_at.try &.>=(Time.utc)
+      _expires_at.try &.<=(Time.utc)
     end
 
     def set_expiration!(seconds : Int32)
