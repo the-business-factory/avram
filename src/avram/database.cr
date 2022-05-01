@@ -191,7 +191,12 @@ abstract class Avram::Database
         else
           ::Log.info { "Closing DB Connection: #{Time.utc}, #{connection.conndata}" }
           connection.close
-          db.pool.create_expiring_connection!(settings.max_connection_length)
+
+          # Is this problematic? We're inside a mutex. We don't care about the
+          # return value, and it's a blocking call.
+          spawn do
+            db.pool.create_expiring_connection!(settings.max_connection_length)
+          end
         end
       end
     end
