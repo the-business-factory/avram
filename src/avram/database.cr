@@ -182,21 +182,15 @@ abstract class Avram::Database
     return if @@reaper_added
 
     Tasker.every(settings.reaping_frequency.seconds) do
-      ::Log.info { "Running Connection Reaper" }
       # each_resource uses a mutex#sync and yields @idle connections, so nothing
       # should be in use or in self.class.connections
       db.pool.each_resource do |connection|
         if connection.expired?
-          ::Log.info { "Closing DB Connection: #{Time.utc}, #{connection.conndata}" }
           connection.close
 
-          # Is this problematic? We're inside a mutex. We don't care about the
-          # return value, and it's a blocking call.
           spawn do
             db.pool.create_expiring_connection!(settings.max_connection_length)
           end
-        else
-          ::Log.info { "DB Connection OK: #{Time.utc}, #{connection.conndata} "}
         end
       end
     end
@@ -206,6 +200,10 @@ abstract class Avram::Database
 
   protected def build_resource : DB::Connection
     db.checkout.tap &.set_expiration!(settings.max_connection_length)
+  end
+
+  def checkout_connection : DB::Connection
+    build_resource
   end
 
   # singular place to retrieve a DB::Connection
