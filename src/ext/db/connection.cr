@@ -11,8 +11,10 @@ module DB
       _expires_at.try &.>=(Time.utc)
     end
 
-    def set_expiration!(amount_in_seconds : Int32)
-      self._expires_at ||= Time.utc + amount_in_seconds.seconds
+    def set_expiration!(seconds : Int32)
+      # Stagger expiration to avoid thundering herd
+      expires_in = rand((seconds * 0.5)..(seconds * 1.5)).floor
+      self._expires_at ||= Time.utc + expires_in.seconds
     end
 
     def conndata
