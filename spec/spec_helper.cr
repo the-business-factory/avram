@@ -51,7 +51,7 @@ ReaperDatabase.configure do |settings|
     password: "developer"
   )
   settings.reaping_retry_delay = 1
-  settings.max_connection_length = 1
+  settings.max_connection_length = 5
 end
 
 Habitat.raise_if_missing_settings!
