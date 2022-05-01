@@ -4,7 +4,6 @@ abstract class Avram::Database
   @@db : DB::Database? = nil
   @@lock = Mutex.new
   class_getter connections = {} of FiberId => DB::Connection
-  class_getter connections_idx = {} of FiberId => FiberId
   class_property lock_id : UInt64?
 
   macro inherited
@@ -180,15 +179,16 @@ abstract class Avram::Database
 
   protected def add_reaper!(new_db : DB::Database) : Nil
     Tasker.every(settings.reaping_frequency.seconds) do
+      Log.info { "Running Connection Reaper" }
+      # each_resource uses a mutex#sync and yields @idle connections, so nothing
+      # should be in use or in self.class.connections
       db.pool.each_resource do |connection|
-        next if connection._avram_in_transaction?
-        next if connection.not_expired?
+        Log.info { "checking #{connection.object_id}, #{connection._expires_at} "}
+        next unless connection.expired?
 
+        Log.info { "closing #{connection.object_id}" }
         connection.close
-        spawn { db.pool._new_connection! }
-        fiber_id = connections_idx[connection.object_id]
-        connections.delete(fiber_id)
-        connections_idx.delete(connection.object_id)
+        db.pool._new_connection!
       end
     end
   end
@@ -207,7 +207,6 @@ abstract class Avram::Database
     key = object_id
     connections[key] ||= build_resource
     connection = connections[key]
-    connections_idx[connection.object_id] ||= key
 
     begin
       yield connection
@@ -255,10 +254,6 @@ abstract class Avram::Database
 
   private def connections
     self.class.connections
-  end
-
-  private def connections_idx
-    self.class.connections_idx
   end
 
   private def wrap_in_transaction(conn)
