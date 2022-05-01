@@ -174,36 +174,36 @@ abstract class Avram::Database
     @@db ||= @@lock.synchronize do
       # check @@db again because a previous request could have set it after
       # the first time it was checked
-      @@db || avram_connection.open.tap { add_reaper! }
+      @@db || avram_connection.open # .tap { add_reaper! }
     end
   end
 
-  protected def add_reaper! : Nil
-    return if @@reaper_added
+  # protected def add_reaper! : Nil
+  #   return if @@reaper_added
 
-    Tasker.every(settings.reaping_frequency.seconds) do
-      # each_resource uses a mutex#sync and yields @idle connections, so nothing
-      # should be in use or in self.class.connections
-      db.pool.each_resource do |connection|
-        if connection.expired?
-          connection.close
+  #   Tasker.every(settings.reaping_frequency.seconds) do
+  #     # each_resource uses a mutex#sync and yields @idle connections, so nothing
+  #     # should be in use or in self.class.connections
+  #     db.pool.each_resource do |connection|
+  #       if connection.expired?
+  #         connection.close
 
-          spawn do
-            db.pool.create_expiring_connection!(settings.max_connection_length)
-          end
-        end
-      end
-    end
+  #         spawn do
+  #           db.pool.create_expiring_connection!(settings.max_connection_length)
+  #         end
+  #       end
+  #     end
+  #   end
 
-    @@reaper_added = true
-  end
+  #   @@reaper_added = true
+  # end
 
-  protected def build_resource : DB::Connection
-    db.checkout.tap &.set_expiration!(settings.max_connection_length)
+  protected def checkout_expiring_connection : DB::Connection
+    db.checkout.tap &.create_expiring!(db.pool, settings.max_connection_length)
   end
 
   def checkout_connection : DB::Connection
-    build_resource
+    checkout_expiring_connection
   end
 
   # singular place to retrieve a DB::Connection
@@ -212,7 +212,7 @@ abstract class Avram::Database
   # once the block is finished
   private def with_connection
     key = object_id
-    connections[key] ||= build_resource
+    connections[key] ||= checkout_expiring_connection
     connection = connections[key]
 
     begin
