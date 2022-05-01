@@ -17,7 +17,7 @@ module DB
 
     def schedule_reaper!(pool : DB::Pool)
       return if @reaper || ttl.zero?
-      ::Log.info { "scheduling reaper for #{Time.utc}, #{object_id}, #{expires_at}" }
+      ::Log.info { "scheduling reaper for #{object_id}, #{expires_at}" }
 
       self.reaper ||= Tasker.at(expires_at.not_nil!) { reap!(pool, ttl) }
     end
@@ -25,11 +25,9 @@ module DB
     def reap!(pool : DB::Pool, ttl : Int32) : Nil
       reaped = false
 
-      puts "\nreaping, closed: #{closed?}"
       ::Log.info { "reaping #{object_id}" }
 
       pool.each_resource do |cnn|
-        puts "resource pool found #{cnn.object_id}"
         if cnn.object_id == object_id
           ::Log.info { "closing #{cnn.object_id}" }
           reaped = true
@@ -42,14 +40,20 @@ module DB
       # have been closed.
       return if reaped || closed?
 
+      ::Log.info { "rescheduling #{object_id}, #{ttl}" }
       sleep(@retry_delay) && reap!(pool, ttl)
     end
 
-    def create_expiring!(pool : DB::Pool, ttl_seconds = 0, retry_delay = 1)
-      # ttl = (ttl_seconds * rand(0.5..1.5)).floor.to_i + ttl_seconds
-      self.ttl = ttl_seconds
+    def create_expiring!(
+      pool : DB::Pool,
+      ttl_seconds : Int32,
+      retry_delay : Int32
+    )
+      # Add some variance to prevent the thundering herd problem.
+      ttl = (ttl_seconds * rand(-0.5..0.5)).floor.to_i + ttl_seconds
+      self.ttl = ttl
       self.retry_delay = retry_delay
-      self.expires_at = Time.utc + 3.seconds
+      self.expires_at = Time.utc + ttl.seconds
 
       return self if @reaper || ttl.zero?
 
