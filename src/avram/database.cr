@@ -3,12 +3,15 @@ abstract class Avram::Database
 
   @@db : DB::Database? = nil
   @@lock = Mutex.new
+
   class_getter connections = {} of FiberId => DB::Connection
   class_property lock_id : UInt64?
 
   macro inherited
     Habitat.create do
       setting credentials : Avram::Credentials, example: %(Avram::Credentials.new(database: "my_database", username: "postgres") or Avram::Credentials.parse(ENV["DB_URL"]))
+      setting reaping_retry_delay : Int32 = 15
+      setting max_connection_length : Int32 = 3600
     end
   end
 
@@ -32,7 +35,7 @@ abstract class Avram::Database
   end
 
   def self.verify_connection
-    new.connection.open.close
+    new.avram_connection.open.close
   end
 
   # Rollback the current transaction
@@ -160,10 +163,10 @@ abstract class Avram::Database
 
   # :nodoc:
   def listen(*channels : String, &block : PQ::Notification ->) : Nil
-    connection.connect_listen(*channels, &block)
+    avram_connection.connect_listen(*channels, &block)
   end
 
-  protected def connection : Avram::Connection
+  protected def avram_connection : Avram::Connection
     Avram::Connection.new(url, database_class: self.class)
   end
 
@@ -171,8 +174,22 @@ abstract class Avram::Database
     @@db ||= @@lock.synchronize do
       # check @@db again because a previous request could have set it after
       # the first time it was checked
-      @@db || connection.open
+      @@db || avram_connection.open
     end
+  end
+
+  protected def checkout_expiring_connection : DB::Connection
+    db.checkout.tap do |cnn|
+      cnn.create_expiring!(
+        db.pool,
+        settings.max_connection_length,
+        settings.reaping_retry_delay
+      )
+    end
+  end
+
+  def checkout_connection : DB::Connection
+    checkout_expiring_connection
   end
 
   # singular place to retrieve a DB::Connection
@@ -181,7 +198,7 @@ abstract class Avram::Database
   # once the block is finished
   private def with_connection
     key = object_id
-    connections[key] ||= db.checkout
+    connections[key] ||= checkout_expiring_connection
     connection = connections[key]
 
     begin

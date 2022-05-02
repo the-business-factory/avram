@@ -40,6 +40,9 @@ dependencies:
   cadmium_transliterator:
     github: cadmiumcr/transliterator
     branch: master
+  tasker:
+    github: spider-gazelle/tasker
+    branch: master
 
 development_dependencies:
   ameba:

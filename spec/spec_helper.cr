@@ -40,4 +40,18 @@ SampleBackupDatabase.configure do |settings|
   )
 end
 
+class ReaperDatabase < Avram::Database
+end
+
+ReaperDatabase.configure do |settings|
+  settings.credentials = Avram::Credentials.parse?(ENV["DATABASE_URL"]?) || Avram::Credentials.new(
+    hostname: "db",
+    database: "avram_dev",
+    username: "lucky",
+    password: "developer"
+  )
+  settings.reaping_retry_delay = 1
+  settings.max_connection_length = 5
+end
+
 Habitat.raise_if_missing_settings!
