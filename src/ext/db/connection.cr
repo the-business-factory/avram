@@ -50,7 +50,7 @@ module DB
       retry_delay : Int32
     )
       # Add some variance to prevent the thundering herd problem.
-      ttl = (ttl_seconds * rand(-0.5..0.5)).floor.to_i + ttl_seconds
+      ttl = (ttl_seconds * rand(-0.1..0.1)).floor.to_i + ttl_seconds
       self.ttl = ttl
       self.retry_delay = retry_delay
       self.expires_at = Time.utc + ttl.seconds
